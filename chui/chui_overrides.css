@@ -1,0 +1,26 @@
+/*These two styles are required for the tab bar to correctly show the selected tab's content instead of overlapping them*/
+
+subview.goup {
+    -webkit-transform: translate3d(0,40%,0);
+}
+
+/*Fix for 'upcoming' views having input tags so they do not receive input when they are not view user is currently interacting with.*/
+view[ui-navigation-status="upcoming"],
+subview[ui-paging-orient=horizontal][ui-navigation-status=upcoming],
+subview[ui-paging-orient=vertical][ui-navigation-status=upcoming] {
+    visibility: hidden;
+}
+
+view[ui-navigation-status="current"],
+subview[ui-paging-orient=horizontal][ui-navigation-status=current],
+subview[ui-paging-orient=vertical][ui-navigation-status=current] {
+    visibility: visible;
+}
+
+/*an intermediate state just to so that backward transition is smooth*/
+view[ui-navigation-status="upcomingIntermediate"],
+subview[ui-paging-orient=horizontal][ui-navigation-status=upcomingIntermediate],
+subview[ui-paging-orient=vertical][ui-navigation-status=upcomingIntermediate] {
+	-webkit-transition: -webkit-transform 0.25s linear;
+    -webkit-transform: translate3d(100%, 0, 0);
+}

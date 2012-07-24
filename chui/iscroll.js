@@ -2,7 +2,6 @@
  * iScroll v4.1.9 ~ Copyright (c) 2011 Matteo Spinelli, http://cubiq.org
  * Released under MIT license, http://cubiq.org/license
  */
-$.UIScrollingActive = false;
 (function(){
 var m = Math,
 	mround = function (r) { return r >> 0; },
@@ -66,7 +65,8 @@ var m = Math,
 			vScroll: true,
 			x: 0,
 			y: 0,
-			bounce: true,
+            /*Set bounce to false to improve scroll performance*/
+			bounce: false,
 			bounceLock: false,
 			momentum: true,
 			lockDirection: true,
@@ -98,7 +98,21 @@ var m = Math,
 
 			// Events
 			onRefresh: null,
-			onBeforeScrollStart: function (e) { e.preventDefault(); },
+			//onBeforeScrollStart: function (e) { e.preventDefault(); },
+            onBeforeScrollStart: function (e) {
+                var target = null;
+                if(e.target){
+                    target = e.target;
+                }
+                else if(e.currentTarget){
+                    target = e.currentTarget;
+                }
+                if (target != null && target.tagName && (target.tagName.toLowerCase() === "select" || target.tagName.toLowerCase() === "input" || target.tagName.toLowerCase() === "a" || target.tagName.toLowerCase() === "img")){
+                    return;
+                }
+                e.preventDefault();
+                //e.stopPropagation();
+            },
 			onScrollStart: null,
 			onBeforeScrollMove: null,
 			onScrollMove: null,
@@ -176,7 +190,7 @@ iScroll.prototype = {
 			case START_EV:
 				if (!hasTouch && e.button !== 0) return;
 				if (e.target.tagName === "TEXTAREA") return;
-				if (e.target.tagName === "INPUT") return;
+				//if (e.target.tagName === "INPUT") return;
 				if (e.target.tagName === "SELECT") return;
 				if (!hasTouch && !that.options.mouseGestures) return;
 				that._start(e);
@@ -236,7 +250,7 @@ iScroll.prototype = {
 			// Create the scrollbar indicator
 			bar = doc.createElement('div');
 			if (!that.options.scrollbarClass) {
-				bar.style.cssText = 'position:absolute;z-index:100;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.9);-' + vendor + '-background-clip:padding-box;-' + vendor + '-box-sizing:border-box;' + (dir == 'h' ? 'height:100%' : 'width:100%') + ';-' + vendor + '-border-radius:3px;border-radius:3px';
+				bar.style.cssText = 'position:absolute;z-index:100;background:rgba(238,238,238,0.5);-' + vendor + '-background-clip:padding-box;-' + vendor + '-box-sizing:border-box;' + (dir == 'h' ? 'height:100%' : 'width:100%') + ';';
 			}
 			bar.style.cssText += ';pointer-events:none;-' + vendor + '-transition-property:-' + vendor + '-transform;-' + vendor + '-transition-timing-function:cubic-bezier(0.33,0.66,0.66,1);-' + vendor + '-transition-duration:0;-' + vendor + '-transform:' + trnOpen + '0,0' + trnClose;
 			if (that.options.useTransition) bar.style.cssText += ';-' + vendor + '-transition-timing-function:cubic-bezier(0.33,0.66,0.66,1)';
@@ -321,7 +335,6 @@ iScroll.prototype = {
 	},
 	
 	_start: function (e) {
-		$.UIScrollingActive = true;
 		var that = this,
 			point = hasTouch ? e.touches[0] : e,
 			matrix, x, y,
@@ -473,7 +486,6 @@ iScroll.prototype = {
 	},
 	
 	_end: function (e) {
-		$.UIScrollingActive = false;
 		if (hasTouch && e.touches.length != 0) return;
 
 		var that = this,

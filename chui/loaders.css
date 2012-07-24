@@ -1,0 +1,75 @@
+@-webkit-keyframes spinner {
+  0% { opacity:1; }
+  100% { opacity:.1; }}
+
+div.loaderMessage {
+  position: absolute;
+  top: 60%;
+  color: #fff;
+  font-weight: bold;
+  overflow: hidden;
+  width: 100%;
+  text-align: center;
+}
+
+div.loader {
+  top:50%;
+  left:50%;
+  width:32px;
+  height:0;
+  margin:-16px 0 0 -16px;
+  padding-top:32px;
+  position:absolute;
+  overflow:hidden;
+}
+div.loader *{
+  position:absolute;
+  width:25%;
+  height:25%;
+  background:#fff;
+  -webkit-border-radius:16px;
+  -moz-border-radius:16px;
+  border-radius:16px;
+  -webkit-animation:spinner 1s linear infinite;
+  -webkit-box-shadow:0 1px 0 rgba(0, 0, 0, .7) inset, 0 1px 0 rgba(255, 255, 255, .7);
+}
+div.loader :nth-child(1) {
+  top:0;
+  right:12px;
+  -webkit-animation-delay:.125s;
+}
+div.loader :nth-child(2) {
+  top:4px;
+  right:4px;
+  -webkit-animation-delay:.25s;
+}
+div.loader :nth-child(3) {
+  top:12px;
+  right:0;
+  -webkit-animation-delay:.375s;
+}
+div.loader :nth-child(4) {
+  bottom:4px;
+  right:4px;
+  -webkit-animation-delay:.5s;
+}
+div.loader :nth-child(5) {
+  bottom:0;
+  right:12px;
+  -webkit-animation-delay:.625s;
+}
+div.loader :nth-child(6) {
+  bottom:4px;
+  left:4px;
+  -webkit-animation-delay:.75s;
+}
+div.loader :nth-child(7) {
+  bottom:12px;
+  left:0;
+  -webkit-animation-delay:.875s;
+}
+div.loader :nth-child(8) {
+  top:4px;
+  left:4px;
+  -webkit-animation-delay:.975s;
+}

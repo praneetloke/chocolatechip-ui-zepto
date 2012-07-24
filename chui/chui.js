@@ -10,42 +10,20 @@
 ChocolateChip-UI for Zepto
 Copyright 2011 Robert Biggs: www.chocolatechip-ui.com
 License: BSD
-Version: 1.0.1
+Version: 1.0
 */
 $(function() {
+	window.tap = ('ontouchstart' in window);
+	window.tapOrClick = (this.tap)?"tap":"click";
 	$.body = $("body");
 	$.app = $("app");
 	$.main = $("#main");
 	$.views = $("view");
+    $.currentTabSubViewId = "";
+	$.currentViewId = "#main";
 	$.tablet = window.innerWidth > 600;
 	$(window).bind("resize", function() {
 		$.tablet = window.innerWidth > 600;
-	});
-	$.touchEnabled = ('ontouchstart' in window);
-	if (!$.touchEnabled) {
-		var stylesheet = $('head').find('link[rel=stylesheet]').attr('href');
-		var stylesheet1 = stylesheet.replace(/chui\.css/, 'chui.desktop.css');
-		$('head').append('<link rel="stylesheet" href="' + stylesheet1 + '">');
-	}
-});
-$.fn.UIHandleTouchState = function(delay) {
-	if ($.UIScrollingActive) return;
-	delay = delay || 200;
-	var $this = $(this);
-	if ($.touchEnabled) {
-		this.addClass('touched');
-		setTimeout(function() {
-			$this.removeClass('touched');
-		}, delay);
-	}
-};
-$(function() {
-	$.app.delegate('uibutton', 'click', function() {
-		if ($(this).hasClass('disabled')) {
-			return false;
-		} else {
-			$(this).UIHandleTouchState();
-		}
 	});
 });
 $.extend($, {
@@ -67,31 +45,38 @@ $.extend($, {
 	},
 	UINavigationHistory : ["#main"],
 	UINavigateBack : function() {
-		var parent = $.UINavigationHistory[$.UINavigationHistory.length-1];
-		$.UINavigationHistory.pop();
-		$($.UINavigationHistory[$.UINavigationHistory.length-1])
-		.attr('ui-navigation-status', 'current');
-		$(parent).attr('ui-navigation-status', 'upcoming');
-		if ($.app.attr('ui-kind')==='navigation-with-one-navbar' && $.UINavigationHistory[$.UINavigationHistory.length-1] === '#main') {
-			$('navbar > uibutton[ui-implements=back]', $.app).css('display','none');
+        //continue only if the navigation history is greater than 2
+        //if it is greater than 2 it means the user has traversed beyond a view that is not the main view
+        //console.log("length of navigation history: " + $.UINavigationHistory.length);
+        if($.UINavigationHistory.length <= 2){
+            return false;
+        }
+		$($.UINavigationHistory[$.UINavigationHistory.length-1]).attr( "ui-navigation-status", "upcomingIntermediate");
+		var poppedViewId = $.UINavigationHistory.pop();
+        $(poppedViewId).trigger("Navigate_Back");
+		//after a small timeout switch this popped view to "upcoming" status
+		setTimeout(function(){
+			$(poppedViewId).attr( "ui-navigation-status", "upcoming");
+		}, 700);
+		$($.UINavigationHistory[$.UINavigationHistory.length-1]).attr("ui-navigation-status", "current");
+		if ($.app.attr("ui-kind")==="navigation-with-one-navbar" && $.UINavigationHistory[$.UINavigationHistory.length-1] === "#main") {
+			$("navbar > uibutton[ui-implements=back]", $.app).css("display","none");
 		}
 	},
 	UIBackNavigation : function () {
-		$.app.delegate("uibutton", "click", function() {
+		$.app.delegate("uibutton", window.tapOrClick, function() {
 			if ($(this).attr("ui-implements") === "back") {
-			   if ($.UINavigationListExits) {
-			   	   $.UINavigateBack();
-			   }
-			}
+			   $.UINavigateBack();
+			}           
 		});
 	},
 	
 	UINavigateToNextView : function(viewID) {
-		$.UINavigationListExits = true;
-		$($.UINavigationHistory[$.UINavigationHistory.length-1])
-			.attr("ui-navigation-status","traversed");
+		$($.UINavigationHistory[$.UINavigationHistory.length-1]).attr("ui-navigation-status","traversed");
 		$(viewID).attr("ui-navigation-status","current");
 		$.UINavigationHistory.push(viewID);
+		//update the current view ID - contains the '#' char
+		$.currentViewId = viewID;
 		if ($.app.attr("ui-kind") === "navigation-with-one-navbar") {
 			$("navbar uibutton[ui-implements=back]").css("display","block");
 		}
@@ -107,66 +92,45 @@ $.extend($, {
 		}
 	},
 	
-	UINavigationListExits : false,
-	
 	UINavigationEvent : false,
-	
-	UINavigationEnabled : false,
 	
     UINavigationList : function() {
 		var navigateList = function(item) {
-			try {
-				if ($.app.attr("ui-kind")==="navigation-with-one-navbar") {
-					$.app.find("navbar > uibutton[ui-implements=back]").css("display", "block");
-				}
-				$(item.attr("href")).attr("ui-navigation-status", "current");
-				$($.UINavigationHistory[$.UINavigationHistory.length-1])
-					.attr("ui-navigation-status", "traversed");
-				if ($.main.attr("ui-navigation-status") !== "traversed") {
-					$.main.attr("ui-navigation-status", "traversed");
-				}
-				$.UINavigationHistory.push(item.attr("href"));
-			} catch(err) {}
+			if ($.app.attr("ui-kind")==="navigation-with-one-navbar") {
+				$.app.find("navbar > uibutton[ui-implements=back]").css("display", "block");
+			}
+            var href = item.attr("href");
+			$(href).attr("ui-navigation-status", "current");
+            $(href).trigger("DetailViewEvent");
+			$($.UINavigationHistory[$.UINavigationHistory.length-1]).attr("ui-navigation-status", "traversed");
+			if ($.main.attr("ui-navigation-status") !== "traversed") {
+				$.main.attr("ui-navigation-status", "traversed");
+			}
+			$.UINavigationHistory.push(item.attr("href"));
 		};
-        $.app.delegate("tablecell", "click", function() {
-            if ($(this).attr("href")) {
-            	$.UINavigationListExits = true;
-            	var $this = $(this);
-            	setTimeout(function() {
-            		$this.UIHandleTouchState();
-					if ($.UINavigationEvent) {
-						return;
-					} else {
-						$.UINavigationEnabled = true;
-						$.UINavigationEvent = false;
-						navigateList($this);
-						$.UINavigationEvent = true;
-					}
-				}, 100);
+        $.app.delegate("tablecell", window.tapOrClick, function() {
+            var thisItem = $(this);
+            if (thisItem.attr("href")) {
+	            if ($.UINavigationEvent) {
+	                return;
+	            } else {
+                    thisItem.addClass("clicked");
+                    setTimeout(function(){
+                        thisItem.removeClass("clicked");
+                        $.UINavigationEvent = false;
+                        navigateList(thisItem);
+                        $.UINavigationEvent = true;
+                    },500);
+	            }
             }
         });
 	}
 });
-$.fn.UIHandleTouchState = function(delay) {
-	if ($.UIScrollingActive) return;
-	delay = delay || 200;
-	var $this = $(this);
-	if ($.touchEnabled) {
-		$this.addClass('touched');
-		setTimeout(function() {
-			$this.removeClass('touched');
-		}, delay);
-	}
-};
 $(function() {
-	if (!$.touchEnabled) {
-		var stylesheet = $('head').find('link[rel=stylesheet]').attr('href');
-		var stylesheet1 = stylesheet.replace(/chui\.css/, 'chui.desktop.css');
-		$('head').append('<link rel="stylesheet" href="' + stylesheet1 + '">');
-	}
     $.UIBackNavigation();
     $.UINavigationList();
     $.app.delegate("view","webkitTransitionEnd", function() {
+		//if (!document.querySelector("view[ui-navigation-status=current]")) {
 		if (!$("view[ui-navigation-status=current]")[0]) {
 			$($.UINavigationHistory[$.UINavigationHistory.length-1])     
                 .attr("ui-navigation-status", "current");
@@ -176,24 +140,6 @@ $(function() {
     });    
 });
 
-$.extend($, {
-	UIScrollers : {},
-	UIEnableScrolling : function ( options ) {
-		$("scrollpanel").each(function() {
-			if ($(this).attr("ui-scroller")) {
-				var whichScroller = $(this).attr("ui-scroller");
-				$.UIScrollers[whichScroller].refresh();
-			} else {
-				$(this).attr("ui-scroller", $.UIUuid());
-				whichScroller = $(this).attr("ui-scroller");
-				$.UIScrollers[whichScroller] = new iScroll(this, options);
-			}
-		});
-	}
-});
-$(function() {
-	$.UIEnableScrolling();
-});
 $.fn.UIToggleButtonLabel = function ( label1, label2 ) {
 	return this.each(function(){
     	var $this = $(this);
@@ -204,15 +150,6 @@ $.fn.UIToggleButtonLabel = function ( label1, label2 ) {
 		}
 	});
 };
-$(function() {
-	$.app.delegate('uibutton', 'touchstart', function() {
-		if ($(this).hasClass('disabled')) {
-			return false;
-		} else {
-			$(this).UIHandleTouchState();
-		}
-	});
-});
 $.fn.toggleClassName = function( firstClassName, secondClassName ) {
 	if (!$(this).hasClass(firstClassName)) {
 	   $(this).addClass(firstClassName);
@@ -222,6 +159,56 @@ $.fn.toggleClassName = function( firstClassName, secondClassName ) {
 		$(this).addClass(secondClassName);
 	}
 };
+$.extend($, {
+	
+	UIScrollers : {},
+	UIEnableScrolling : function ( options ) {
+		$("scrollpanel").each(function() {
+            var whichScroller = "";
+			if ($(this).attr("ui-scroller")) {
+				whichScroller = $(this).attr("ui-scroller");
+				$.UIScrollers[whichScroller].refresh();
+			} else {
+				$(this).attr("ui-scroller", $.UIUuid());
+				whichScroller = $(this).attr("ui-scroller");
+				$.UIScrollers[whichScroller] = new iScroll(this, options);
+			}
+		});
+	},
+    UIEnableScrollingForScrollPanel: function ( selector, options ) {
+         var scrollPanel = $("#" + selector);
+         if(scrollPanel.length == 0){
+             scrollPanel = $("." + selector);
+         }
+         //check if this scrollpanel already has a uuid that we can use to fetch the associated iScroll instance and refresh
+         var whichScroller = scrollPanel.attr("ui-scroller");
+         if(whichScroller){
+            $.UIScrollers[whichScroller].refresh();
+         }
+         else{
+            //set the uuid for this scrollpanel
+            scrollPanel.attr("ui-scroller", $.UIUuid());
+            whichScroller = scrollPanel.attr("ui-scroller");
+            $.UIScrollers[whichScroller] = new iScroll(scrollPanel.get(0), options);
+         }
+    },
+    UIDestroyScroller: function(selector){
+         var el = $("#" + selector);
+         if(el.length == 0){
+            el = $("." + selector);
+         }
+         var scrollInstance = el.attr("ui-scroller");
+         if(typeof scrollInstance !== "undefined" && scrollInstance != null){
+             $.UIScrollers[scrollInstance].destroy();
+             $.UIScrollers[scrollInstance] = null;
+         }
+         scrollInstance = null;
+         el = null;
+    }
+});
+$(function() {
+	$.UIEnableScrolling();
+});
 $.fn.UIIdentifyChildNodes = function ( ) {
 	var kids = $(this).children();
 	kids.each(function(idx, kid) {
@@ -231,12 +218,13 @@ $.fn.UIIdentifyChildNodes = function ( ) {
 $.extend($, {
 	UIPaging : function( selector, opts ) {
 		var myPager = new iScroll( selector, opts );
+        $.UIScrollers["myPager"] = myPager;
 		selector = $(selector);
 		var stack = selector.find("stack");
 		selector.parent().attr("ui-scroller","myPager");
 		var panels = stack.children().length;
 		var indicatorsWidth = selector.parent().css("width");
-		var indicators = '<stack ui-implements="indicators" style="width:"' + indicatorsWidth + ';">';
+		var indicators = '<stack ui-implements="indicators" class="indicators" style="width:"' + indicatorsWidth + ';">';
 		for (var i = 0; i < panels; i++) {
 			if (i === 0) {
 				indicators += '<indicator class="active"></indicator>';
@@ -248,20 +236,36 @@ $.extend($, {
 		// The maximum number of indicators in portrait view is 17.
 		selector.parent().parent().append(indicators);
 		return this;
-	}
+	},
+    UISetupPaging : function() {
+        if ($("stack[ui-implements=paging]").length > 0) {
+            $.UIPaging("stack[ui-implements=paging] > panel", {
+                snap: true,
+                momentum: true,
+                hScrollbar: false,
+                onScrollEnd: function () {
+                    $('stack[ui-implements="indicators"] > indicator.active').removeClass('active');
+                    $('stack[ui-implements="indicators"] > indicator:nth-child(' + (this.currPageX+1) + ')').addClass('active');
+                } 
+            });
+        }
+    },
+    UISetupPagingForPanel : function(stackId, panelId) {
+        if ($("#" + stackId).length > 0) {
+            $.UIPaging("#" + panelId, {
+                snap: true,
+                momentum: true,
+                hScrollbar: false,
+                onScrollEnd: function () {
+                    $('stack[ui-implements="indicators"] > indicator.active').removeClass('active');
+                    $('stack[ui-implements="indicators"] > indicator:nth-child(' + (this.currPageX+1) + ')').addClass('active');
+                } 
+            });
+        }
+    }
 });
 $(function() {
-	if ($("stack[ui-implements=paging]").length > 0) {
-		$.UIPaging("stack[ui-implements=paging] > panel", {
-			snap: true,
-			momentum: false,
-			hScrollbar: false,
-			onScrollEnd: function () {
-				$('stack[ui-implements="indicators"] > indicator.active').removeClass('active');
-				$('stack[ui-implements="indicators"] > indicator:nth-child(' + (this.currPageX+1) + ')').addClass('active');
-			} 
-		});
-	}
+    $.UISetupPaging();
 });
 $.fn.UISegmentedPagingControl = function ( ) {
 	var segmentedPager = $("segmentedcontrol[ui-implements=segmented-paging]");
@@ -278,7 +282,7 @@ $.fn.UISegmentedPagingControl = function ( ) {
 		$(this).attr("ui-paging-orient", pagingOrientation);
 	});
 	subviews.eq(0).attr("ui-navigation-status", "current");
-	segmentedPager.delegate("uibutton", "click", function() {
+	segmentedPager.delegate("uibutton", window.tapOrClick, function() {
 		if ($(this).hasClass("disabled")) {return;}
 		var pager = $(this).closest("segmentedcontrol");
 		if ($(this)[0].isSameNode($(this)[0].parentNode.firstElementChild)) {
@@ -364,7 +368,7 @@ $.extend($, {
 
 		listEl.attr("data-deletable-items", 0);
 		var UIEditExecution = function() {
-		   $(options.toolbar + " > uibutton[ui-implements=edit]").bind("click", function() {			   
+		   $(options.toolbar + " > uibutton[ui-implements=edit]").bind(window.tapOrClick, function() {			   
 		       
 		   	   var labels = $(this).attr("ui-button-labels");
 		   	   var buttonLabel = $(this).find("label");
@@ -394,7 +398,7 @@ $.extend($, {
 		   });
 		};
 		var UIDeleteDisclosureSelection = function() {
-			$("deletedisclosure").bind("click", function() {
+			$("deletedisclosure").bind(window.tapOrClick, function() {
 				$(this).toggleClass("checked");
 				$(this).closest("tablecell").toggleClass("deletable");
 				$("uibutton[ui-implements=delete]").removeClass("disabled");
@@ -410,7 +414,7 @@ $.extend($, {
 		};
 
 		var UIDeletionExecution = function() {
-		   $("uibutton[ui-implements=delete]").bind("click", function() {
+		   $("uibutton[ui-implements=delete]").bind(window.tapOrClick, function() {
 			   if ($(this).hasClass("disabled")) {
 				   return;
 			   }
@@ -530,10 +534,10 @@ $.extend($, {
 		if (defaultValue == opts.range.end) {
 			$("uibutton:last-of-type", spinner).addClass("disabled");
 		}
-		$("uibutton:first-of-type", opts.selector).bind("click", function(button) {
+		$("uibutton:first-of-type", opts.selector).bind(window.tapOrClick, function(button) {
 			$.decreaseSpinnerValue.call(this, opts.selector);
 		});
-		$("uibutton:last-of-type", opts.selector).bind("click", function(button) {
+		$("uibutton:last-of-type", opts.selector).bind(window.tapOrClick, function(button) {
 			$.increaseSpinnerValue.call(this, opts.selector);
 		});
 	},
@@ -608,7 +612,7 @@ $.extend($, {
 		var popupID = "#" + id;
 		$.app.UIBlock("0.5");
 		var popupBtn = "#" + id + " uibutton";
-		$(popupBtn).bind("click", cancelClickPopup = function(e) {
+		$(popupBtn).bind(window.tapOrClick, cancelClickPopup = function(e) {
 			if ($(this).attr("ui-implements")==="continue") {
 				callback.call(callback, this);
 			}
@@ -639,9 +643,11 @@ $.extend($, {
 		$.UIPopUpIsActive = true;
 		$.UIPopUpIdentifier = selector;
 		var popup = $(selector);
+		//console.log(selector);
 		var pos = {};
 		pos.top = ((window.innerHeight /2) + window.pageYOffset) - (popup[0].clientHeight /2);
 		pos.left = (window.innerWidth / 2) - (popup[0].clientWidth / 2);
+		//console.log(pos);
 		popup.css(pos); 
 	},
 	UIRepositionPopupOnOrientationChange : function ( ) {
@@ -663,8 +669,8 @@ $.extend($, {
 		}, false);	
 	},
 	UIClosePopup : function ( selector ) {
-		$(selector + " uibutton[ui-implements=cancel]").unbind("click", "cancelClickPopup");
-			$(selector + " uibutton[ui-implements=continue]").unbind("click", "cancelTouchPopup");
+		$(selector + " uibutton[ui-implements=cancel]").unbind(window.tapOrClick, "cancelClickPopup");
+			$(selector + " uibutton[ui-implements=continue]").unbind(window.tapOrClick, "cancelTouchPopup");
 		$(selector).UIUnblock();
 		$(selector).remove();
 		$.UIPopUpIdentifier = null;
@@ -672,17 +678,6 @@ $.extend($, {
 	}
 });
 
-$.fn.UIBlock = function ( opacity ) {
-	opacity = opacity ? " style='opacity:" + opacity + "'" : "";
-	$(this).before("<mask" + opacity + "></mask>");
-	return this;
-};
-$.fn.UIUnblock = function ( ) {
-	if ($("mask").length > 0) {
-		$("mask").remove();
-	}
-	return this;
-};
 $(function() {
 	$.UIRepositionPopupOnOrientationChange();
 });
@@ -690,18 +685,15 @@ $.fn.UISelectionList = function ( callback ) {
 	$(this).children().each( function(idx) {
 		if (this.nodeName.toLowerCase() === "tablecell") {
 			this.insertAdjacentHTML("afterBegin", "<checkmark>&#x2713</checkmark>");
-			$(this).bind("click", function() {
+			$(this).bind(window.tapOrClick, function() {
 				var $this = $(this);
-				setTimeout(function() {
-					if ($.UIScrollingActive) return;
-					$this.siblings().removeClass("selected").removeClass('touched');
-					$this.addClass("selected");
-					$this.UIHandleTouchState();
-					$this.find("input")[0].checked = true; 
-					if (callback) {
-						callback.call(callback, $this.find("input"));
-					}
-				}, 150);
+				$this.siblings().removeClass("selected");
+				$this.addClass("selected");
+				$this.find("input")[0].checked = true; 
+				if (callback) {
+					callback.call(callback, $this.find("input"));
+				}
+				$this = null;
 			});
 		}
 	});
@@ -732,7 +724,7 @@ $.fn.UIInitSwitchToggling = function() {
 			$(this).attr("checked","false");
 			$(this).find("input[type='checkbox']").attr("checked","false");
 		}
-		$(this).bind("click", function(e) {
+		$(this).bind(window.tapOrClick, function(e) {
 			$(this).parent().css("backgroundImage","none");
 			e.preventDefault();
 			$(this).UISwitchControl();
@@ -785,7 +777,7 @@ $.fn.UICreateSwitchControl = function( opts ) {
 	$(this).append(uiswitch);
 	var newSwitchID = "#" + id;
 	$(newSwitchID).find("input").attr("checked", (status === "on" ? true : false));
-	$(newSwitchID).bind("click", function() {
+	$(newSwitchID).bind(window.tapOrClick, function() {
 		$(this).UISwitchControl(callback);
 	});
 };
@@ -794,7 +786,7 @@ $.fn.UISegmentedControl = function( container, callback ) {
 	var val = 0;
 	callback = callback || function(){};
 	var buttons = $(this).children();
-	var container = $(container);
+	var cont = $(container);
 	if (!$(this).attr('ui-selected-segment')) {
 		$(this).attr("ui-selected-segment", "");
 	}
@@ -804,10 +796,10 @@ $.fn.UISegmentedControl = function( container, callback ) {
 		try {
 			seg = seg.attr("id");
 			$(this).attr("ui-selected-segment", seg);
-			$(this).childred().eq(val).addClass("selected");
+			$(this).children().eq(val).addClass("selected");
 		} catch(e) {}
 	} else {
-		var checkChildNodesForAttr = -1;
+		var checkChildNodesForAttr = 0;
 		for (var i = 0, len = $(this).children().length; i < len; i++) {
 			if ($(this).children().eq(i).hasClass("selected")) {
 				$(this).attr("ui-selected-index", i);
@@ -827,12 +819,12 @@ $.fn.UISegmentedControl = function( container, callback ) {
 		} else {
 			container.attr("ui-selected-index", 0);
 		}
-		container.children().css("display", "none");
+		container.children().css("display: none;");
 		container.children().eq(val).css("display","block");
 		that.attr("ui-segmented-container", ("#" + container.attr("id")));
 		var selectedIndex = this.attr("ui-selected-index");
-		var whichScroller = $(this).closest("scrollpanel").attr("ui-scroller");
-					$.UIScrollers[whichScroller].refresh()
+		var whichScroller = container.closest("scrollpanel").attr("ui-scroller");
+		$.UIScrollers[whichScroller].refresh();
 	}
 
 	buttons.each(function() {
@@ -845,8 +837,7 @@ $.fn.UISegmentedControl = function( container, callback ) {
 				that.attr("ui-selected-segment", $(this).attr("id"));
 			}
 		}
-		$(this).bind("click", function() {
-			if ($(this).hasClass('disabled')) return false;
+		$(this).bind(window.tapOrClick, function() {
 			var selectedSegment = that.attr("ui-selected-segment");
 			var selectedIndex = that.attr("ui-selected-index");
 			var uicp = $(this).attr("ui-child-position");
@@ -867,7 +858,7 @@ $.fn.UISegmentedControl = function( container, callback ) {
 				container.attr("ui-selected-index", uicp);
 				container.children().eq(selectedIndex).css("display", "none");						
 				container.children().eq(uicp).css("display","-webkit-box");
-				var whichScroller = $(this).closest("scrollpanel").attr("ui-scroller");
+				var whichScroller = container.closest("scrollpanel").attr("ui-scroller");
 				$.UIScrollers[whichScroller].refresh()
 			}
 			$(this).addClass("selected");
@@ -876,14 +867,13 @@ $.fn.UISegmentedControl = function( container, callback ) {
 	});
 	$(this).UIIdentifyChildNodes();
 };
+
 $(function() {	 
 	$("segmentedcontrol").each(function(idx) {
 		if ($(this).attr("ui-implements") !== "segmented-paging") {
 			$(this).UISegmentedControl();
 			var whichScroller = $(this).closest("scrollpanel").attr("ui-scroller");
-			if (whichScroller) {
-				$.UIScrollers[whichScroller].refresh()
-			}
+			$.UIScrollers[whichScroller].refresh()
 		}
 	});
 });
@@ -966,8 +956,13 @@ $.fn.UICreateTabBar = function ( opts ) {
 			}
 			tabbar += "'";
 		}
-		tabbar += "><icon style='-webkit-mask-box-image: url(" + imagePath;
-		tabbar += iconsOfTabs[i] + ".svg);'></icon>";
+        if(iconsOfTabs[i].indexOf(".png") > -1){
+            tabbar += "><icon style='background-image: url(" + iconsOfTabs[i] + ");'></icon>";
+        }
+        else{
+            tabbar += "><icon style='-webkit-mask-box-image: url(" + imagePath;
+            tabbar += iconsOfTabs[i] + ".svg);'></icon>";
+        }
 		tabbar += "<label>" + tabLabels[i] + "</label></uibutton>";
 	}
 	tabbar += "</tabbar>";
@@ -984,19 +979,30 @@ $.fn.UITabBar = function ( ) {
 	subviews.addClass("unselected");
 	var selectedTab = tabbar.attr("ui-selected-tab") || 0;
 	subviews.eq(selectedTab).toggleClassName("unselected","selected");
+    $.currentTabSubViewId = subviews.eq(selectedTab).attr("id");
+    //console.log("current subview selected: " + $.currentTabSubViewId);
 	tabs.eq(selectedTab).addClass("selected");
+    subviews.eq(selectedTab).trigger("TabContent_Show", [tabs.eq(selectedTab)]);
 	tabs.each(function(idx) {
-		$(this).bind("click", function() {
+		$(this).bind(window.tapOrClick, function() {
 			if ($(this).hasClass("disabled") || $(this).hasClass("selected")) {
 				return;
 			}
 			var whichTab = $(this).closest("tabbar").attr("ui-selected-tab");
 			tabs.eq(whichTab).removeClass("selected");
 			$(this).addClass("selected");
-			subviews.eq(whichTab).removeClass("selected");
-			subviews.eq(whichTab).addClass("unselected");
-			subviews.eq($(this).attr("ui-child-position")).addClass("selected");
-			subviews.eq($(this).attr("ui-child-position")).removeClass("unselected");
+            //for the subview being hidden dispatch the TabContent_Hide
+            var subviewBeingHidden = subviews.eq(whichTab);
+			subviewBeingHidden.removeClass("selected").addClass("unselected");
+            subviewBeingHidden.trigger("TabContent_Hide", [tabs.eq(whichTab)]);
+                     
+            var subviewBeingRevealed = subviews.eq($(this).attr("ui-child-position"));
+			//subviews.eq(whichTab).addClass("unselected");
+            $.currentTabSubViewId = subviewBeingRevealed.attr("id");
+            //console.log("current subview selected: " + $.currentTabSubViewId);
+			subviewBeingRevealed.addClass("selected").removeClass("unselected");
+            subviewBeingRevealed.trigger("TabContent_Show", [$(this)]);
+			//subviews.eq($(this).attr("ui-child-position")).removeClass("unselected");
 			tabbar.attr("ui-selected-tab", $(this).attr("ui-child-position"));
 		});
 	});
@@ -1011,7 +1017,7 @@ $.fn.UITabBarForViews = function ( ) {
 	views.eq(selectedTab).attr("ui-navigation-status","current");
 	tabs.eq(selectedTab).addClass("selected");
 	tabs.each(function(idx) {
-		$(this).bind("click", function() {
+		$(this).bind(window.tapOrClick, function() {
 			if ($(this).hasClass("disabled") || $(this).hasClass("selected")) {
 				return;
 			}
@@ -1029,7 +1035,6 @@ $.fn.UIActionSheet = function(opts) {
 	var that = $(this);
 	var actionSheetID = opts.id;
 	var actionSheetColor =  opts.color;
-	var actionSheetUuid = $.UIUuid();
 	var title = "";
 	if (opts.title) {
 		title = "<p>" + opts.title + "</p>";
@@ -1039,7 +1044,7 @@ $.fn.UIActionSheet = function(opts) {
 		if (actionSheetColor) {
 			actionSheetStr += " ui-action-sheet-color='" + actionSheetColor + "'";
 		}
-		actionSheetStr += "><scrollpanel  ui-scroller='" + actionSheetUuid + "'><panel>";
+		actionSheetStr += "><scrollpanel  ui-scroller='" + $.UIUuid() + "'><panel>";
 		actionSheetStr += title;
 		var uiButtons = "", uiButtonObj, uiButtonImplements, uiButtonTitle, uiButtonCallback;
 		if (!!opts.uiButtons) {
@@ -1058,14 +1063,15 @@ $.fn.UIActionSheet = function(opts) {
 		actionSheetStr += uiButtons + "<uibutton ui-kind='action' ui-implements='cancel' class='stretch' onclick='$.UIHideActionSheet(\"#" + actionSheetID + "\")'><label>Cancel</label></uibutton></panel></scrollpanel></actionsheet>";
 		var actionSheet = $(actionSheetStr);
 		that.append(actionSheet);
-		var scrollpanel = $('#'+actionSheetID).find('scrollpanel')[0];
-		$.UIScrollers[actionSheetUuid] = new iScroll(scrollpanel);
 	};
 	createActionSheet();
 	var actionSheetUIButtons = "#" + actionSheetID + " uibutton";
-	$(actionSheetUIButtons).bind("click", function() {
+	$(actionSheetUIButtons).bind(window.tapOrClick, function() {
 		$.UIHideActionSheet();
 	});
+	
+	var scroller = new iScroll($("#actionsheet_01").find('scrollpanel')[0]);
+	$("#" + actionSheetID).data("ui-scroller", scroller);
 };
 $.extend($, {
 	UIShowActionSheet : function(actionSheetID) {
@@ -1078,8 +1084,6 @@ $.extend($, {
 		screenCover.bind("touchmove", function(e) {
 			e.preventDefault();
 		});
-		var whichScroller = $(actionSheetID).find("scrollpanel").attr("ui-scroller");
-		$.UIScrollers[whichScroller].refresh();
 	},
 	UIHideActionSheet : function() {
 		var actionSheet = $.app.data("ui-action-sheet-id");
@@ -1137,7 +1141,7 @@ $.fn.UIExpander = function ( opts ) {
 		expander.removeClass("ui-status-expanded");
 		expander.addClass("ui-status-collapsed");
 	}
-	$("header", expander).bind("click", function() {
+	$("header", expander).bind(window.tapOrClick, function() {
 		if (panel.height() === 0) {
 			panel.height(panel.attr("ui-height"));
 			panel.css("opacity", 1);
@@ -1227,11 +1231,11 @@ $(window).bind("resize", function() {
 $.fn.UISetTranstionType = function( transtion ) {
 	$(this).attr("ui-transition-type", transtion);
 };
-$.fn.UIFlipSubview = function ( direction ) {
+$.fn.UIFlipSubview = function ( direction, callback ) {
 	var view = $(this).closest("view");
 	direction = direction || "left";
 	view.UISetTranstionType("flip-" + direction);
-	$(this).bind("click", function() {
+	$(this).unbind().bind(window.tapOrClick, function(e) {
 		switch (direction) {
 			case "right":
 				view.find("subview:nth-of-type(1)").toggleClassName("flip-right-front-in", "flip-right-front-out");
@@ -1253,12 +1257,15 @@ $.fn.UIFlipSubview = function ( direction ) {
 				view.find("subview:nth-of-type(1)").toggleClassName("flip-right-front-in","flip-right-front-out");
 				view.find("subview:nth-of-type(2)").toggleClassName("flip-right-back-in","flip-right-back-out");
 		}
+		if(callback) {
+			callback(e);
+		}
 	});
 };
 $.fn.UIPopSubview = function ( ) {
 	var view = $(this).closest("view");
 	view.UISetTranstionType("pop");
-	$(this).bind("click", function() {
+	$(this).bind(window.tapOrClick, function() {
 		$("subview:nth-of-type(2)", view).toggleClassName("pop-in","pop-out");	
 	});
 };
@@ -1267,7 +1274,7 @@ $.fn.UIFadeSubview = function ( ) {
 	var view = $(this).closest("view");
 	view.UISetTranstionType("fade");
 	view.attr("ui-transition-type", "fade");
-	$(this).bind("click", function() {
+	$(this).bind(window.tapOrClick, function() {
 		$("subview:nth-of-type(2)", view).toggleClassName("fade-in", "fade-out");
 	});
 };
@@ -1276,17 +1283,17 @@ $.fn.UISpinSubview = function ( direction ) {
 	view.UISetTranstionType("spin");
 	if (!direction || direction === "left") {
 		$(this).UISetTranstionType("left");
-		$(this).bind("click", function() {
+		$(this).bind(window.tapOrClick, function() {
 			$("subview:nth-of-type(2)", view).toggleClassName("spin-left-in", "spin-left-out");
 		});
 	} else if (direction === "right") {
 		$(this).UISetTranstionType("right");
-		$(this).bind("click", function() {
+		$(this).bind(window.tapOrClick, function() {
 			$("subview:nth-of-type(2)", view).toggleClassName("spin-right-in", "spin-right-out");
 		});
 	} else {
 		$(this).UISetTranstionType("left");
-		$(this).bind("click", function() {
+		$(this).bind(window.tapOrClick, function() {
 			$("subview:nth-of-type(2)", view).toggleClassName("spin-left-in", "spin-left-out");
 		});
 	}
@@ -1372,7 +1379,7 @@ $(function() {
 			}
 			if ($("splitview")) {
 				$.UISplitView();
-				$("#showRootView").bind("click", function() {
+				$("#showRootView").bind(window.tapOrClick, function() {
 					$.UIToggleRootView();
 				});
 				$.body.bind("orientationchange", function(){
@@ -1390,7 +1397,7 @@ $(function() {
 	if ($("detailview > subview").length > 0) {
 		$.UICurrentSplitViewDetail = "#";
 		$.UICurrentSplitViewDetail += $("detailview > subview").eq(0).attr("id");
-		$("tableview[ui-implements=detail-menu] > tablecell").bind("click", function() {
+		$("tableview[ui-implements=detail-menu] > tablecell").bind(window.tapOrClick, function() {
 			var rootview = $(this).closest("rootview");
 			if (rootview.css("position") === "absolute") {
 				rootview.css("display","none");
@@ -1408,7 +1415,7 @@ $(function() {
 				$.UIEnableScrolling();
 			}
 		});
-		$.app.delegate("mask", "click", function() {
+		$.app.delegate("mask", window.tapOrClick, function() {
 			$.rootview.css("display","none");
 			$.app.UIUnblock();
 		});
@@ -1416,7 +1423,7 @@ $(function() {
 });
 
 $(function() {
-	$.app.delegate("mask", "click", function() {
+	$.app.delegate("mask", window.tapOrClick, function() {
 		if ($.UIPopover.activePopover) {
 			$.UIPopover.hide($("#"+$.UIPopover.activePopover));
 			if ($("mask")) {
@@ -1429,9 +1436,34 @@ $(function() {
 		}
 	});
 });
-$.fn.UIBlock = function ( opacity ) {
-	opacity = opacity ? " style='opacity:" + opacity + "'" : "";
-	$(this).prepend("<mask" + opacity + "></mask>");
+$.fn.UIBlock = function ( opacity, message, hideSpinner ) {
+    if(!message){
+        message = "Loading..";
+    }
+    opacity = opacity ? " style='opacity:" + opacity + "'" : "";
+    var spinner = "<div class='loader'>" +
+    "<span></span>" +
+    "<span></span>" +
+    "<span></span>" +
+    "<span></span>" +
+    "<span></span>" +
+    "<span></span>" +
+    "<span></span>" +
+    "<span></span>​" +
+    "</div>" +
+    "<div class='loaderMessage'>" + message + "</div>";
+    if(!hideSpinner){
+        $(this).prepend("<mask" + opacity + ">" + spinner + "</mask>");
+    }
+	else {
+        $(this).prepend("<mask" + opacity + "></mask>");
+    }
+};
+$.fn.UpdateUIMaskMessage = function(message) {
+    if(!message){
+        message = "Loading..";
+    }
+    $(".loaderMessage").html(message);
 };
 $.fn.UIUnblock = function ( ) {
 	if ($("mask").length > 0) {
@@ -1592,8 +1624,8 @@ $.extend($, {
 		try {
 			var count = 0;
 			$("popover scrollpanel").each(function(idx, item) {
-				item.attr("ui-scroller", $.UIUuid());
-				var whichScroller = item.attr("ui-scroller");
+				item.setAttribute("ui-scroller", $.UIUuid());
+				var whichScroller = item.getAttribute("ui-scroller");
 				$.UIScrollers[whichScroller] = new iScroll(item.parentNode);
 			});
 		} catch(e) { }
